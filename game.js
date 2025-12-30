@@ -604,7 +604,7 @@ const SoundManager = {
       clear: 0.4,
       combo: 2.5,
       gameOver: 0.5,
-      highScore: 0.7,
+      highScore: 2.5,
       youLose: 2.5
     };
 
