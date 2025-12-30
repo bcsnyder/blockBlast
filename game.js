@@ -578,17 +578,17 @@ const SoundManager = {
   buffers: {},       // AudioBuffer for each sound
   volumes: {},       // Volume/gain for each sound
   initialized: false,
+  unlocked: false,   // iOS audio unlock state
   bgMusic: null,
   bgMusicVolume: 0.3,
   audioContext: null,
 
-  async init() {
+  init() {
     if (this.initialized) return;
 
-    // Create Web Audio API context
-    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
-    const soundFiles = {
+    // Don't create AudioContext until first user interaction (iOS requirement)
+    // Just set up the sound file paths and volumes
+    this.soundFiles = {
       place: 'sounds/place.mp3',
       clear: 'sounds/sweep.mp3',
       combo: 'sounds/combo.mp3',
@@ -613,70 +613,118 @@ const SoundManager = {
     this.bgMusic.volume = this.bgMusicVolume;
     this.bgMusic.preload = 'auto';
 
-    // Load all sound files as AudioBuffers (works reliably on mobile Safari)
-    const loadPromises = Object.entries(soundFiles).map(async ([name, src]) => {
-      try {
-        const response = await fetch(src);
-        const arrayBuffer = await response.arrayBuffer();
-        this.buffers[name] = await this.audioContext.decodeAudioData(arrayBuffer);
-      } catch (err) {
-        console.warn('Failed to load sound:', name, err.message);
-      }
-    });
-
-    await Promise.all(loadPromises);
-
     // Load saved preference
     const saved = localStorage.getItem('blockblast-sound');
     if (saved !== null) {
       this.enabled = saved === 'true';
     }
 
-    // Start background music on first user interaction (browser autoplay policy)
-    const startMusic = () => {
-      // Resume audio context (required by some browsers)
-      if (this.audioContext && this.audioContext.state === 'suspended') {
-        this.audioContext.resume();
-      }
+    // Unlock audio on first user interaction (critical for iOS Safari)
+    const unlock = async (e) => {
+      if (this.unlocked) return;
+
+      await this.unlockAudio();
       this.playBackgroundMusic();
-      document.removeEventListener('pointerdown', startMusic);
-      document.removeEventListener('keydown', startMusic);
+
+      document.removeEventListener('touchstart', unlock, true);
+      document.removeEventListener('touchend', unlock, true);
+      document.removeEventListener('pointerdown', unlock, true);
+      document.removeEventListener('keydown', unlock, true);
+      document.removeEventListener('click', unlock, true);
     };
-    document.addEventListener('pointerdown', startMusic, { once: true });
-    document.addEventListener('keydown', startMusic, { once: true });
+
+    // Use multiple event types for iOS - touchstart/touchend are most reliable
+    document.addEventListener('touchstart', unlock, { capture: true, once: false });
+    document.addEventListener('touchend', unlock, { capture: true, once: false });
+    document.addEventListener('pointerdown', unlock, { capture: true, once: false });
+    document.addEventListener('keydown', unlock, { capture: true, once: false });
+    document.addEventListener('click', unlock, { capture: true, once: false });
 
     this.initialized = true;
     console.log('SoundManager initialized, enabled:', this.enabled);
   },
 
+  async unlockAudio() {
+    if (this.unlocked) return;
+
+    try {
+      // Create AudioContext during user gesture (required for iOS)
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+
+      // Resume if suspended
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+      }
+
+      // Play a silent buffer to fully unlock audio on iOS
+      const silentBuffer = this.audioContext.createBuffer(1, 1, 22050);
+      const source = this.audioContext.createBufferSource();
+      source.buffer = silentBuffer;
+      source.connect(this.audioContext.destination);
+      source.start(0);
+
+      // Now load all the actual sound files
+      await this.loadSounds();
+
+      this.unlocked = true;
+      console.log('Audio unlocked successfully');
+    } catch (err) {
+      console.warn('Failed to unlock audio:', err.message);
+    }
+  },
+
+  async loadSounds() {
+    if (Object.keys(this.buffers).length > 0) return; // Already loaded
+
+    const loadPromises = Object.entries(this.soundFiles).map(async ([name, src]) => {
+      try {
+        const response = await fetch(src);
+        const arrayBuffer = await response.arrayBuffer();
+        // Need to copy the arrayBuffer since decodeAudioData consumes it
+        this.buffers[name] = await this.audioContext.decodeAudioData(arrayBuffer);
+        console.log('Loaded sound:', name);
+      } catch (err) {
+        console.warn('Failed to load sound:', name, err.message);
+      }
+    });
+
+    await Promise.all(loadPromises);
+  },
+
   play(soundName) {
-    if (!this.enabled) {
+    if (!this.enabled || !this.unlocked || !this.audioContext) {
       return;
     }
 
     const buffer = this.buffers[soundName];
     if (!buffer) {
-      console.warn('Sound not found:', soundName);
+      // Buffer might still be loading, skip silently
       return;
     }
 
-    // Resume audio context if suspended (required for mobile browsers)
-    if (this.audioContext && this.audioContext.state === 'suspended') {
-      this.audioContext.resume();
+    try {
+      // Resume audio context if suspended (required for mobile browsers)
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+
+      // Create a new buffer source for each play (they're one-shot)
+      const source = this.audioContext.createBufferSource();
+      source.buffer = buffer;
+
+      // Create gain node for volume control
+      const gainNode = this.audioContext.createGain();
+      gainNode.gain.value = this.volumes[soundName] || 0.5;
+
+      source.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
+
+      source.start(0);
+    } catch (err) {
+      console.warn('Sound play failed:', soundName, err.message);
     }
-
-    // Create a new buffer source for each play (they're one-shot)
-    const source = this.audioContext.createBufferSource();
-    source.buffer = buffer;
-
-    // Create gain node for volume control
-    const gainNode = this.audioContext.createGain();
-    gainNode.gain.value = this.volumes[soundName] || 0.5;
-
-    source.connect(gainNode);
-    gainNode.connect(this.audioContext.destination);
-
-    source.start(0);
   },
 
   playPlace() { this.play('place'); },
@@ -689,7 +737,7 @@ const SoundManager = {
   // Play a sound and return a promise that resolves when it ends
   playWithCallback(soundName) {
     return new Promise((resolve) => {
-      if (!this.enabled) {
+      if (!this.enabled || !this.unlocked || !this.audioContext) {
         resolve();
         return;
       }
@@ -700,22 +748,27 @@ const SoundManager = {
         return;
       }
 
-      // Resume audio context if suspended (required for mobile browsers)
-      if (this.audioContext && this.audioContext.state === 'suspended') {
-        this.audioContext.resume();
+      try {
+        // Resume audio context if suspended (required for mobile browsers)
+        if (this.audioContext.state === 'suspended') {
+          this.audioContext.resume();
+        }
+
+        const source = this.audioContext.createBufferSource();
+        source.buffer = buffer;
+
+        const gainNode = this.audioContext.createGain();
+        gainNode.gain.value = this.volumes[soundName] || 0.5;
+
+        source.connect(gainNode);
+        gainNode.connect(this.audioContext.destination);
+
+        source.onended = () => resolve();
+        source.start(0);
+      } catch (err) {
+        console.warn('Sound play failed:', soundName, err.message);
+        resolve();
       }
-
-      const source = this.audioContext.createBufferSource();
-      source.buffer = buffer;
-
-      const gainNode = this.audioContext.createGain();
-      gainNode.gain.value = this.volumes[soundName] || 0.5;
-
-      source.connect(gainNode);
-      gainNode.connect(this.audioContext.destination);
-
-      source.onended = () => resolve();
-      source.start(0);
     });
   },
 
