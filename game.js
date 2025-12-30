@@ -1204,6 +1204,9 @@ class Game {
         // Generate fresh pieces
         this.generateTrayPieces();
         this.renderTray();
+
+        // Unpause music
+        SoundManager.playBackgroundMusic();
     }
 
     /**
