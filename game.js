@@ -670,6 +670,11 @@ const SoundManager = {
       return;
     }
 
+    // Resume audio context if suspended (required for mobile browsers)
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
+    }
+
     // Find an audio element that's not currently playing
     let audio = pool.find(a => a.paused || a.ended);
 
@@ -703,6 +708,11 @@ const SoundManager = {
       if (!pool || pool.length === 0) {
         resolve();
         return;
+      }
+
+      // Resume audio context if suspended (required for mobile browsers)
+      if (this.audioContext && this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
       }
 
       let audio = pool.find(a => a.paused || a.ended);
