@@ -575,18 +575,17 @@ class Grid {
 
 const SoundManager = {
   enabled: true,
-  pools: {},
-  poolSize: 3,
+  buffers: {},       // AudioBuffer for each sound
+  volumes: {},       // Volume/gain for each sound
   initialized: false,
   bgMusic: null,
   bgMusicVolume: 0.3,
   audioContext: null,
-  gainNodes: {},
 
-  init() {
+  async init() {
     if (this.initialized) return;
 
-    // Create Web Audio API context for amplification
+    // Create Web Audio API context
     this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
     const soundFiles = {
@@ -599,7 +598,7 @@ const SoundManager = {
     };
 
     // Volumes > 1.0 will amplify the sound
-    const volumes = {
+    this.volumes = {
       place: 0.4,
       clear: 0.4,
       combo: 2.5,
@@ -608,33 +607,24 @@ const SoundManager = {
       youLose: 2.5
     };
 
-    // Initialize background music
+    // Initialize background music (plain Audio element works better on mobile)
     this.bgMusic = new Audio('sounds/background.mp3');
     this.bgMusic.loop = true;
     this.bgMusic.volume = this.bgMusicVolume;
     this.bgMusic.preload = 'auto';
 
-    // Create pool of Audio objects for each sound with Web Audio API gain
-    for (const [name, src] of Object.entries(soundFiles)) {
-      this.pools[name] = [];
-      this.gainNodes[name] = [];
-
-      for (let i = 0; i < this.poolSize; i++) {
-        const audio = new Audio(src);
-        audio.preload = 'auto';
-
-        // Create gain node for amplification
-        const source = this.audioContext.createMediaElementSource(audio);
-        const gainNode = this.audioContext.createGain();
-        gainNode.gain.value = volumes[name] || 0.5;
-
-        source.connect(gainNode);
-        gainNode.connect(this.audioContext.destination);
-
-        this.pools[name].push(audio);
-        this.gainNodes[name].push(gainNode);
+    // Load all sound files as AudioBuffers (works reliably on mobile Safari)
+    const loadPromises = Object.entries(soundFiles).map(async ([name, src]) => {
+      try {
+        const response = await fetch(src);
+        const arrayBuffer = await response.arrayBuffer();
+        this.buffers[name] = await this.audioContext.decodeAudioData(arrayBuffer);
+      } catch (err) {
+        console.warn('Failed to load sound:', name, err.message);
       }
-    }
+    });
+
+    await Promise.all(loadPromises);
 
     // Load saved preference
     const saved = localStorage.getItem('blockblast-sound');
@@ -664,8 +654,8 @@ const SoundManager = {
       return;
     }
 
-    const pool = this.pools[soundName];
-    if (!pool || pool.length === 0) {
+    const buffer = this.buffers[soundName];
+    if (!buffer) {
       console.warn('Sound not found:', soundName);
       return;
     }
@@ -675,18 +665,18 @@ const SoundManager = {
       this.audioContext.resume();
     }
 
-    // Find an audio element that's not currently playing
-    let audio = pool.find(a => a.paused || a.ended);
+    // Create a new buffer source for each play (they're one-shot)
+    const source = this.audioContext.createBufferSource();
+    source.buffer = buffer;
 
-    // If all are playing, just use the first one
-    if (!audio) {
-      audio = pool[0];
-    }
+    // Create gain node for volume control
+    const gainNode = this.audioContext.createGain();
+    gainNode.gain.value = this.volumes[soundName] || 0.5;
 
-    audio.currentTime = 0;
-    audio.play().catch(err => {
-      console.warn('Sound play failed:', soundName, err.message);
-    });
+    source.connect(gainNode);
+    gainNode.connect(this.audioContext.destination);
+
+    source.start(0);
   },
 
   playPlace() { this.play('place'); },
@@ -704,8 +694,8 @@ const SoundManager = {
         return;
       }
 
-      const pool = this.pools[soundName];
-      if (!pool || pool.length === 0) {
+      const buffer = this.buffers[soundName];
+      if (!buffer) {
         resolve();
         return;
       }
@@ -715,14 +705,17 @@ const SoundManager = {
         this.audioContext.resume();
       }
 
-      let audio = pool.find(a => a.paused || a.ended);
-      if (!audio) {
-        audio = pool[0];
-      }
+      const source = this.audioContext.createBufferSource();
+      source.buffer = buffer;
 
-      audio.currentTime = 0;
-      audio.onended = () => resolve();
-      audio.play().catch(() => resolve());
+      const gainNode = this.audioContext.createGain();
+      gainNode.gain.value = this.volumes[soundName] || 0.5;
+
+      source.connect(gainNode);
+      gainNode.connect(this.audioContext.destination);
+
+      source.onended = () => resolve();
+      source.start(0);
     });
   },
 
