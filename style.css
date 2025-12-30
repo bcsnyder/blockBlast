@@ -1,0 +1,988 @@
+/* Block Blast - Core Styles */
+/* Phase 1-5: Foundation, Drag & Drop, Game Mechanics, Scoring, Polish & UX */
+
+/* ============================================
+   CSS Custom Properties
+   ============================================ */
+:root {
+    /* Background colors - deep gradient palette */
+    --bg-primary: #0f0f1a;
+    --bg-secondary: #1a1a2e;
+    --bg-tertiary: #252542;
+    --bg-cell: #2a2a4a;
+    --bg-cell-empty: #1e1e38;
+
+    /* Piece colors - vibrant, saturated palette */
+    --color-cyan: #00D4FF;
+    --color-orange: #FF8C00;
+    --color-yellow: #FFD700;
+    --color-green: #00E676;
+    --color-purple: #B388FF;
+    --color-red: #FF5252;
+    --color-pink: #FF4081;
+
+    /* UI colors */
+    --text-primary: #ffffff;
+    --text-secondary: #8888aa;
+    --border-color: rgba(255, 255, 255, 0.08);
+    --glow-color: rgba(0, 212, 255, 0.3);
+
+    /* Sizing - mobile first */
+    --cell-size: 42px;
+    --cell-gap: 3px;
+    --piece-cell-size: 18px;
+    --border-radius: 12px;
+    --border-radius-sm: 6px;
+    --border-radius-lg: 16px;
+
+    /* Timing */
+    --transition-fast: 150ms;
+    --transition-normal: 250ms;
+    --transition-slow: 400ms;
+    --ease-out-back: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+/* Tablet and up */
+@media (min-width: 480px) {
+    :root {
+        --cell-size: 50px;
+        --piece-cell-size: 22px;
+    }
+}
+
+/* Desktop */
+@media (min-width: 768px) {
+    :root {
+        --cell-size: 54px;
+        --piece-cell-size: 24px;
+    }
+}
+
+/* ============================================
+   Reset and Base Styles
+   ============================================ */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    /* Prevent pull-to-refresh on mobile */
+    overscroll-behavior: none;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+    background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile */
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    color: var(--text-primary);
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ============================================
+   Game Container
+   ============================================ */
+.game-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    max-width: 500px;
+    width: 100%;
+    position: relative;
+    /* Fade in on load */
+    opacity: 0;
+    animation: fadeInGame 0.5s ease-out 0.1s forwards;
+}
+
+@keyframes fadeInGame {
+    to { opacity: 1; }
+}
+
+/* ============================================
+   Header Section
+   ============================================ */
+.game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    padding: 0 4px;
+}
+
+.game-title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--color-cyan) 0%, var(--color-purple) 50%, var(--color-pink) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 2px 4px rgba(0, 212, 255, 0.3));
+    letter-spacing: -0.5px;
+}
+
+.scores-wrapper {
+    display: flex;
+    gap: 8px;
+}
+
+.score-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-cell) 100%);
+    padding: 8px 16px;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    box-shadow:
+        0 4px 12px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    min-width: 70px;
+}
+
+.high-score-container {
+    background: linear-gradient(180deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 212, 255, 0.05) 100%);
+}
+
+.score-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.score-value {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: var(--color-yellow);
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.4);
+    transition: transform var(--transition-fast) ease, color var(--transition-fast) ease;
+}
+
+.high-score-value {
+    color: var(--color-cyan) !important;
+    font-size: 1.2rem !important;
+    text-shadow: 0 0 10px rgba(0, 212, 255, 0.4) !important;
+}
+
+/* ============================================
+   Grid Container
+   ============================================ */
+.grid-container {
+    background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+    padding: 10px;
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        0 2px 8px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+    transition: box-shadow var(--transition-normal) ease;
+}
+
+/* 8x8 Game Grid */
+.game-grid {
+    display: grid;
+    grid-template-columns: repeat(8, var(--cell-size));
+    grid-template-rows: repeat(8, var(--cell-size));
+    gap: var(--cell-gap);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 2px;
+    border-radius: calc(var(--border-radius) - 2px);
+}
+
+/* ============================================
+   Grid Cells
+   ============================================ */
+.grid-cell {
+    width: var(--cell-size);
+    height: var(--cell-size);
+    background: var(--bg-cell-empty);
+    border-radius: var(--border-radius-sm);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    transition:
+        background-color var(--transition-fast) ease,
+        transform var(--transition-fast) ease,
+        box-shadow var(--transition-fast) ease;
+    position: relative;
+}
+
+/* Subtle grid pattern in empty cells */
+.grid-cell::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg,
+        rgba(255, 255, 255, 0.02) 0%,
+        transparent 50%);
+    border-radius: inherit;
+    pointer-events: none;
+}
+
+/* Filled cell - candy/gem style */
+.grid-cell.filled {
+    border: none;
+    background: linear-gradient(180deg,
+        rgba(255, 255, 255, 0.15) 0%,
+        transparent 40%,
+        rgba(0, 0, 0, 0.2) 100%);
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.25),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.25),
+        0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.grid-cell.filled::before {
+    background: linear-gradient(135deg,
+        rgba(255, 255, 255, 0.3) 0%,
+        transparent 50%);
+}
+
+/* ============================================
+   Piece Tray
+   ============================================ */
+.piece-tray {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+    border-radius: var(--border-radius-lg);
+    border: 1px solid var(--border-color);
+    box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    min-height: 100px;
+    width: 100%;
+}
+
+/* Tray slot placeholder */
+.tray-slot {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-width: 60px;
+    min-height: 60px;
+}
+
+/* Individual piece in tray */
+.tray-piece {
+    display: grid;
+    gap: 2px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: var(--border-radius);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition:
+        transform var(--transition-fast) var(--ease-out-back),
+        box-shadow var(--transition-fast) ease,
+        border-color var(--transition-fast) ease;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.tray-piece:hover {
+    transform: scale(1.08);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.4),
+        0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.tray-piece:active {
+    transform: scale(1.12);
+}
+
+/* Mini cells for piece preview */
+.piece-cell {
+    width: var(--piece-cell-size);
+    height: var(--piece-cell-size);
+    border-radius: 4px;
+    transition: background-color var(--transition-fast) ease;
+}
+
+.piece-cell.filled {
+    background: linear-gradient(180deg,
+        rgba(255, 255, 255, 0.2) 0%,
+        transparent 40%,
+        rgba(0, 0, 0, 0.2) 100%);
+    box-shadow:
+        inset 0 1px 2px rgba(255, 255, 255, 0.3),
+        inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+        0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.piece-cell.empty {
+    background: transparent;
+}
+
+/* ============================================
+   Controls
+   ============================================ */
+.controls {
+    display: flex;
+    gap: 12px;
+}
+
+.btn-new-game {
+    padding: 14px 32px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    background: linear-gradient(180deg, var(--color-purple) 0%, #7b2d8e 100%);
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition:
+        transform var(--transition-fast) ease,
+        box-shadow var(--transition-fast) ease,
+        filter var(--transition-fast) ease;
+    box-shadow:
+        0 4px 12px rgba(155, 89, 182, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.btn-new-game:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(155, 89, 182, 0.5);
+    filter: brightness(1.1);
+}
+
+.btn-new-game:active {
+    transform: translateY(0);
+    filter: brightness(0.95);
+}
+
+/* ============================================
+   DRAG & DROP STYLES
+   ============================================ */
+
+/* Prevent scrolling while dragging on mobile */
+body.is-dragging {
+    overflow: hidden;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+/* Tray piece being dragged (source) - dimmed state */
+.tray-piece.dragging-source {
+    opacity: 0.25;
+    transform: scale(0.9);
+    pointer-events: none;
+    filter: grayscale(0.5);
+}
+
+/* Tray piece after successful placement - fade out */
+.tray-piece.placed {
+    opacity: 0 !important;
+    transform: scale(0.3) !important;
+    pointer-events: none !important;
+    transition:
+        opacity var(--transition-normal) ease,
+        transform var(--transition-normal) var(--ease-out-quart) !important;
+}
+
+/* Floating drag piece */
+.drag-piece {
+    position: fixed;
+    top: 0;
+    left: 0;
+    display: grid;
+    z-index: 1000;
+    pointer-events: none;
+    transform-origin: center center;
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.4));
+    will-change: transform, opacity;
+    animation: pickupPiece var(--transition-fast) var(--ease-out-back) forwards;
+}
+
+@keyframes pickupPiece {
+    from {
+        opacity: 0;
+        scale: 0.8;
+    }
+    to {
+        opacity: 1;
+        scale: 1;
+    }
+}
+
+/* Drag piece cells */
+.drag-cell {
+    border-radius: var(--border-radius-sm);
+}
+
+.drag-cell.filled {
+    background: linear-gradient(180deg,
+        rgba(255, 255, 255, 0.25) 0%,
+        transparent 40%,
+        rgba(0, 0, 0, 0.2) 100%);
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.35),
+        inset 0 -2px 4px rgba(0, 0, 0, 0.25),
+        0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+.drag-cell.empty {
+    background: transparent;
+}
+
+/* Return animation for invalid placement */
+.drag-piece.returning {
+    transition: transform 0.3s var(--ease-out-quart), opacity 0.3s ease;
+    opacity: 0.4;
+}
+
+/* Ghost preview on grid */
+.grid-cell.ghost {
+    transition:
+        background-color var(--transition-fast) ease,
+        box-shadow var(--transition-fast) ease,
+        opacity var(--transition-fast) ease;
+}
+
+/* Valid ghost - shows piece color semi-transparent with pulse */
+.grid-cell.ghost-valid {
+    background-color: var(--ghost-color, #00d4ff);
+    opacity: 0.5;
+    box-shadow:
+        inset 0 2px 4px rgba(255, 255, 255, 0.2),
+        0 0 16px var(--ghost-color, #00d4ff);
+    border: none;
+    animation: ghostPulse 1s ease-in-out infinite;
+}
+
+@keyframes ghostPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.6; }
+}
+
+/* Invalid ghost - red overlay */
+.grid-cell.ghost-invalid {
+    background-color: var(--color-red);
+    opacity: 0.3;
+    border: none;
+}
+
+/* Grid highlight when dragging */
+body.is-dragging .grid-container {
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.4),
+        0 0 0 2px rgba(0, 212, 255, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* ============================================
+   GAME MECHANICS ANIMATIONS
+   ============================================ */
+
+/* Piece placement animation - satisfying pop */
+.grid-cell.placing {
+    animation: placePop 0.25s var(--ease-out-back);
+}
+
+@keyframes placePop {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+    60% {
+        transform: scale(1.15);
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Line clearing animation - flash and burst */
+.grid-cell.clearing {
+    animation: clearBurst 0.35s ease-out forwards;
+}
+
+@keyframes clearBurst {
+    0% {
+        transform: scale(1);
+        filter: brightness(1);
+    }
+    20% {
+        transform: scale(1.15);
+        filter: brightness(2.5);
+        background-color: #ffffff !important;
+    }
+    100% {
+        transform: scale(0);
+        opacity: 0;
+        filter: brightness(1);
+    }
+}
+
+/* Score pulse animation - more dramatic */
+.score-value.score-pulse {
+    animation: scoreBounce 0.35s var(--ease-out-back);
+}
+
+@keyframes scoreBounce {
+    0% {
+        transform: scale(1);
+    }
+    40% {
+        transform: scale(1.3);
+        color: #ffffff;
+        text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+/* Combo popup styles */
+.combo-popup {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.5);
+    font-size: 2.5rem;
+    font-weight: 900;
+    color: #ffffff;
+    text-shadow:
+        0 0 20px rgba(255, 215, 0, 1),
+        0 0 40px rgba(255, 215, 0, 0.8),
+        0 0 60px rgba(255, 215, 0, 0.4),
+        3px 3px 6px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 100;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+}
+
+.combo-popup.show {
+    animation: comboIn 0.4s var(--ease-out-back) forwards;
+}
+
+.combo-popup.hide {
+    animation: comboOut 0.4s ease-in forwards;
+}
+
+@keyframes comboIn {
+    0% {
+        transform: translate(-50%, -50%) scale(0.3) rotate(-10deg);
+        opacity: 0;
+    }
+    70% {
+        transform: translate(-50%, -50%) scale(1.2) rotate(2deg);
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(1) rotate(0deg);
+        opacity: 1;
+    }
+}
+
+@keyframes comboOut {
+    0% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -80%) scale(0.7);
+        opacity: 0;
+    }
+}
+
+/* Tray piece enter animation - staggered slide up */
+.tray-piece.entering {
+    opacity: 0;
+    transform: scale(0.5) translateY(30px);
+}
+
+.tray-piece.entered {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    transition:
+        opacity 0.4s var(--ease-out-quart),
+        transform 0.4s var(--ease-out-back);
+}
+
+/* ============================================
+   GAME OVER MODAL
+   ============================================ */
+
+.game-over-modal {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.4s ease, visibility 0.4s ease;
+}
+
+.game-over-modal.visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.modal-content {
+    position: relative;
+    background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+    padding: 40px 50px;
+    border-radius: 20px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+    box-shadow:
+        0 24px 80px rgba(0, 0, 0, 0.6),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transform: scale(0.7) translateY(40px);
+    transition: transform 0.4s var(--ease-out-back);
+    min-width: 300px;
+    max-width: 90vw;
+}
+
+.game-over-modal.visible .modal-content {
+    transform: scale(1) translateY(0);
+}
+
+.modal-title {
+    font-size: 2.5rem;
+    font-weight: 900;
+    margin-bottom: 24px;
+    background: linear-gradient(135deg, var(--color-red) 0%, var(--color-orange) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    filter: drop-shadow(0 2px 4px rgba(255, 82, 82, 0.3));
+}
+
+.modal-score {
+    margin-bottom: 16px;
+}
+
+.modal-score-label {
+    display: block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+}
+
+.modal-score-value {
+    display: block;
+    font-size: 4rem;
+    font-weight: 900;
+    color: var(--color-yellow);
+    text-shadow:
+        0 0 30px rgba(255, 215, 0, 0.6),
+        0 4px 8px rgba(0, 0, 0, 0.3);
+    line-height: 1;
+}
+
+.new-high-score {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--color-green);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 28px;
+    padding: 8px 16px;
+    background: rgba(0, 230, 118, 0.1);
+    border-radius: var(--border-radius);
+    display: inline-block;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.new-high-score.visible {
+    opacity: 1;
+    transform: scale(1);
+    animation: newHighScorePulse 1.5s ease-in-out infinite;
+}
+
+@keyframes newHighScorePulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.4);
+    }
+    50% {
+        transform: scale(1.02);
+        box-shadow: 0 0 20px 4px rgba(0, 230, 118, 0.2);
+    }
+}
+
+.btn-play-again {
+    padding: 18px 56px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--text-primary);
+    background: linear-gradient(180deg, var(--color-green) 0%, #00b862 100%);
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition:
+        transform var(--transition-fast) ease,
+        box-shadow var(--transition-fast) ease,
+        filter var(--transition-fast) ease;
+    box-shadow:
+        0 6px 24px rgba(0, 230, 118, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.btn-play-again:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 10px 32px rgba(0, 230, 118, 0.5);
+    filter: brightness(1.1);
+}
+
+.btn-play-again:active {
+    transform: translateY(0) scale(0.98);
+    filter: brightness(0.95);
+}
+
+/* ============================================
+   RESPONSIVE DESIGN
+   ============================================ */
+
+@media (max-width: 480px) {
+    body {
+        padding: 12px;
+        padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .game-container {
+        gap: 16px;
+    }
+
+    .game-header {
+        flex-direction: column;
+        gap: 12px;
+        align-items: center;
+    }
+
+    .game-title {
+        font-size: 2rem;
+    }
+
+    .scores-wrapper {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .score-container {
+        flex: 1;
+        max-width: 120px;
+    }
+
+    .piece-tray {
+        gap: 12px;
+        padding: 14px 16px;
+        min-height: 90px;
+    }
+
+    .tray-piece {
+        padding: 6px;
+    }
+
+    .btn-new-game {
+        padding: 12px 28px;
+        font-size: 0.9rem;
+    }
+
+    .combo-popup {
+        font-size: 2rem;
+    }
+
+    .modal-content {
+        padding: 32px 28px;
+        min-width: 280px;
+    }
+
+    .modal-title {
+        font-size: 2rem;
+        margin-bottom: 20px;
+    }
+
+    .modal-score-value {
+        font-size: 3rem;
+    }
+
+    .btn-play-again {
+        padding: 16px 44px;
+        font-size: 1rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .game-title {
+        font-size: 1.75rem;
+    }
+
+    .score-value {
+        font-size: 1.2rem;
+    }
+
+    .high-score-value {
+        font-size: 1rem !important;
+    }
+
+    .piece-tray {
+        gap: 8px;
+        padding: 12px;
+    }
+
+    .combo-popup {
+        font-size: 1.5rem;
+    }
+
+    .modal-content {
+        padding: 28px 24px;
+        min-width: 260px;
+    }
+
+    .modal-title {
+        font-size: 1.75rem;
+    }
+
+    .modal-score-value {
+        font-size: 2.5rem;
+    }
+
+    .new-high-score {
+        font-size: 0.95rem;
+        margin-bottom: 24px;
+    }
+
+    .btn-play-again {
+        padding: 14px 36px;
+        font-size: 0.95rem;
+    }
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+
+    .game-container {
+        animation: none;
+        opacity: 1;
+    }
+}
+
+/* Focus styles for keyboard navigation */
+.btn-new-game:focus-visible,
+.btn-play-again:focus-visible {
+    outline: 2px solid var(--color-cyan);
+    outline-offset: 3px;
+}
+
+.tray-piece:focus-visible {
+    outline: 2px solid var(--color-cyan);
+    outline-offset: 2px;
+}
+
+/* ============================================
+   SOUND TOGGLE BUTTON
+   ============================================ */
+
+.btn-sound {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    font-size: 1.25rem;
+    cursor: pointer;
+    transition:
+        background-color var(--transition-fast) ease,
+        transform var(--transition-fast) ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 10;
+}
+
+.btn-sound:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+}
+
+.btn-sound:active {
+    transform: scale(0.95);
+}
+
+.btn-sound:focus-visible {
+    outline: 2px solid var(--color-cyan);
+    outline-offset: 2px;
+}
+
+/* Show/hide sound icons based on state */
+.btn-sound .sound-off {
+    display: none;
+}
+
+.btn-sound.muted .sound-on {
+    display: none;
+}
+
+.btn-sound.muted .sound-off {
+    display: inline;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+    .btn-sound {
+        width: 40px;
+        height: 40px;
+        font-size: 1.1rem;
+    }
+}
